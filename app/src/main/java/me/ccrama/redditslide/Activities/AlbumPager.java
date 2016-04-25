@@ -5,6 +5,7 @@ import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.TypedArray;
@@ -72,6 +73,7 @@ import me.ccrama.redditslide.Views.ToolbarColorizeHelper;
 import me.ccrama.redditslide.util.AlbumUtils;
 import me.ccrama.redditslide.util.GifUtils;
 import me.ccrama.redditslide.util.LogUtil;
+import me.ccrama.redditslide.util.NetworkUtil;
 import me.ccrama.redditslide.util.SubmissionParser;
 
 
@@ -496,17 +498,20 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
                 url = (user.getAsJsonObject().get("link").getAsString());
 
             }
-
-            final String finalUrl = url;
+            Context context  = getActivity();
+            // Only get low resolution images under the following conditions
+            boolean isLowRes = SettingValues.lowResAlways ||
+                    ((!NetworkUtil.isConnectedWifi(context) && SettingValues.lowResMobile));
+            // Rewrite the URL only during low resolution image requests
+            final String finalUrl = isLowRes ? AlbumUtils.getImgurHugeThumbnailUrl(url) : url;
             {
                 rootView.findViewById(R.id.more).setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        ((AlbumPager)getActivity()).showBottomSheetImage(url, false);
+                        ((AlbumPager)getActivity()).showBottomSheetImage(finalUrl, false);
                     }
                 });
                 {
-                    final String finalUrl1 = url;
                     rootView.findViewById(R.id.save).setOnClickListener(new View.OnClickListener() {
 
                         @Override
@@ -518,7 +523,7 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
                                         .loadImage(finalUrl, new SimpleImageLoadingListener() {
                                             @Override
                                             public void onLoadingComplete(String imageUri, View view, final Bitmap loadedImage) {
-                                                ((AlbumPager)getActivity()).saveImageGallery(loadedImage, finalUrl1);
+                                                ((AlbumPager)getActivity()).saveImageGallery(loadedImage, finalUrl);
                                             }
 
                                         });
@@ -538,7 +543,7 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
             fakeImage.setLayoutParams(new LinearLayout.LayoutParams(image.getWidth(), image.getHeight()));
             fakeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
             ((Reddit) getActivity().getApplication()).getImageLoader()
-                    .displayImage(url, new ImageViewAware(fakeImage), ImageLoaderUtils.options, new ImageLoadingListener() {
+                    .displayImage(finalUrl, new ImageViewAware(fakeImage), ImageLoaderUtils.options, new ImageLoadingListener() {
                         private View mView;
 
                         @Override

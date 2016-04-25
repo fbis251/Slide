@@ -32,6 +32,8 @@ import me.ccrama.redditslide.SecretConstants;
 public class AlbumUtils {
 
     public static SharedPreferences albumRequests;
+    public final static String[] REWRITE_EXTENSIONS = {".jpg", ".png"}; // Needs a . as a prefix: Example: .jpg
+    public final static String IMGUR_HUGE_THUMBNAIL_PREFIX = "h";
 
     private static String getHash(String s) {
         String next = s.substring(s.lastIndexOf("/"), s.length());
@@ -397,4 +399,14 @@ public class AlbumUtils {
         }
     }
 
+    public static String getImgurHugeThumbnailUrl(String url) {
+        String result = url;
+        for (String extension : REWRITE_EXTENSIONS) {
+            if (url.endsWith(extension)) {
+                result = url.replace(extension, IMGUR_HUGE_THUMBNAIL_PREFIX + extension);
+            }
+        }
+
+        return result;
+    }
 }
