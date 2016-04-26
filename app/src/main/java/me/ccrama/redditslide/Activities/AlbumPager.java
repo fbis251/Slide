@@ -85,6 +85,9 @@ import me.ccrama.redditslide.util.SubmissionParser;
  * bars which Album.java doesn't.
  */
 public class AlbumPager extends FullScreenActivity implements FolderChooserDialog.FolderCallback {
+
+    private static final String EXTRA_PAGE = "page";
+
     boolean gallery = false;
 
     @Override
@@ -294,14 +297,14 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
                 //do gif stuff
                 Fragment f = new Gif();
                 Bundle args = new Bundle();
-                args.putInt("page", i);
+                args.putInt(EXTRA_PAGE, i);
                 f.setArguments(args);
 
                 return f;
             } else {
                 Fragment f = new ImageFullNoSubmission();
                 Bundle args = new Bundle();
-                args.putInt("page", i);
+                args.putInt(EXTRA_PAGE, i);
                 f.setArguments(args);
 
                 return f;
@@ -396,9 +399,8 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             Bundle bundle = this.getArguments();
-            i = bundle.getInt("page", 0);
-            user = ((AlbumPager)getActivity()).images.get(bundle.getInt("page", 0));
-
+            i = bundle.getInt(EXTRA_PAGE, 0);
+            user = ((AlbumPager)getActivity()).images.get(bundle.getInt(EXTRA_PAGE, 0));
         }
 
     }
