@@ -1,5 +1,21 @@
 package me.ccrama.redditslide.Activities;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import com.afollestad.materialdialogs.AlertDialogWrapper;
+import com.afollestad.materialdialogs.MaterialDialog;
+import com.afollestad.materialdialogs.folderselector.FolderChooserDialog;
+import com.cocosw.bottomsheet.BottomSheet;
+import com.nostra13.universalimageloader.core.assist.FailReason;
+import com.nostra13.universalimageloader.core.imageaware.ImageViewAware;
+import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
+import com.nostra13.universalimageloader.core.listener.ImageLoadingProgressListener;
+import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
+import com.sothree.slidinguppanel.SlidingUpPanelLayout;
+
+import org.jetbrains.annotations.NotNull;
+
 import android.app.Activity;
 import android.app.Dialog;
 import android.app.Notification;
@@ -37,20 +53,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
-
-import com.afollestad.materialdialogs.AlertDialogWrapper;
-import com.afollestad.materialdialogs.MaterialDialog;
-import com.afollestad.materialdialogs.folderselector.FolderChooserDialog;
-import com.cocosw.bottomsheet.BottomSheet;
-import com.google.gson.JsonElement;
-import com.nostra13.universalimageloader.core.assist.FailReason;
-import com.nostra13.universalimageloader.core.imageaware.ImageViewAware;
-import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
-import com.nostra13.universalimageloader.core.listener.ImageLoadingProgressListener;
-import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
-import com.sothree.slidinguppanel.SlidingUpPanelLayout;
-
-import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -479,10 +481,9 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
     public static class ImageFullNoSubmission extends Fragment {
 
         private int i = 0;
-        private JsonElement user;
+        private JsonElement imageJsonElement;
 
         public ImageFullNoSubmission() {
-
         }
 
         @Override
@@ -490,143 +491,117 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
                                  Bundle savedInstanceState) {
             final ViewGroup rootView = (ViewGroup) inflater.inflate(
                     R.layout.album_image_pager, container, false);
+            final View hqView = rootView.findViewById(R.id.hq);
 
-            final String url;
+            final JsonObject imageJson = imageJsonElement.getAsJsonObject();
+            final String     url;
 
             if (((AlbumPager)getActivity()).gallery) {
-                url = ("https://imgur.com/" + user.getAsJsonObject().get("hash").getAsString() + ".png");
-
+                url = ("https://imgur.com/" + imageJson.get("hash").getAsString() + ".png");
             } else {
-                url = (user.getAsJsonObject().get("link").getAsString());
-
+                url = (imageJson.get("link").getAsString());
             }
-            Context context  = getActivity();
+
+            final Context context  = getActivity();
+
             // Only get low resolution images under the following conditions
             boolean isLowRes = SettingValues.lowResAlways ||
                     ((!NetworkUtil.isConnectedWifi(context) && SettingValues.lowResMobile));
+
             // Rewrite the URL only during low resolution image requests
             final String finalUrl = isLowRes ? AlbumUtils.getImgurHugeThumbnailUrl(url) : url;
-            {
-                rootView.findViewById(R.id.more).setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        ((AlbumPager)getActivity()).showBottomSheetImage(finalUrl, false);
+
+            // Only show the HQ button when in low res mode
+            int hqVisibility = isLowRes ? View.VISIBLE : View.GONE;
+            hqView.setVisibility(hqVisibility);
+            hqView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    // Passing in the original content URL to load the high quality image
+                    loadImage(url, rootView, hqView, imageJson);
+                    hqView.setVisibility(View.GONE);
+                }
+            });
+
+            rootView.findViewById(R.id.more).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    ((AlbumPager) getActivity()).showBottomSheetImage(finalUrl, false);
+                }
+            });
+
+            rootView.findViewById(R.id.save).setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v2) {
+                    try {
+                        ((Reddit) (getActivity()).getApplication()).getImageLoader()
+                                .loadImage(url, new SimpleImageLoadingListener() {
+                                    @Override
+                                    public void onLoadingComplete(String imageUri,
+                                                                  View view,
+                                                                  final Bitmap loadedImage) {
+                                        ((AlbumPager) getActivity()).saveImageGallery(loadedImage,
+                                                                                      url);
+                                    }
+
+                                });
+                    } catch (Exception e) {
+                        LogUtil.e("Could not download image: " + url);
                     }
-                });
-                {
-                    rootView.findViewById(R.id.save).setOnClickListener(new View.OnClickListener() {
+                }
+            });
 
-                        @Override
-                        public void onClick(View v2) {
-
-
-                            try {
-                                ((Reddit) (getActivity()).getApplication()).getImageLoader()
-                                        .loadImage(finalUrl, new SimpleImageLoadingListener() {
-                                            @Override
-                                            public void onLoadingComplete(String imageUri, View view, final Bitmap loadedImage) {
-                                                ((AlbumPager)getActivity()).saveImageGallery(loadedImage, finalUrl);
-                                            }
-
-                                        });
-                            } catch (Exception e) {
-                                Log.v(LogUtil.getTag(), "COULDN'T DOWNLOAD!");
-                            }
-
-                        }
-
-                    });
+            // TODO: FIX View: requestLayout() improperly called by android.widget.TextView during layout: running second layout pass
+            // Set up the title/description if available
+            if (imageJson.has("image")) {
+                String title = "";
+                String description = "";
+                if (!imageJson.getAsJsonObject("image").get("title").isJsonNull()) {
+                    List<String> text = SubmissionParser.getBlocks(imageJson.getAsJsonObject("image").get("title").getAsString());
+                    title = text.get(0).trim();
                 }
 
-
-            }
-            final SubsamplingScaleImageView image = (SubsamplingScaleImageView) rootView.findViewById(R.id.image);
-            ImageView fakeImage = new ImageView(getActivity());
-            fakeImage.setLayoutParams(new LinearLayout.LayoutParams(image.getWidth(), image.getHeight()));
-            fakeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            ((Reddit) getActivity().getApplication()).getImageLoader()
-                    .displayImage(finalUrl, new ImageViewAware(fakeImage), ImageLoaderUtils.options, new ImageLoadingListener() {
-                        private View mView;
-
-                        @Override
-                        public void onLoadingStarted(String imageUri, View view) {
-                            mView = view;
-                        }
-
-                        @Override
-                        public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
-                            Log.v("Slide", "LOADING FAILED");
-
-                        }
-
-                        @Override
-                        public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
-                            image.setImage(ImageSource.bitmap(loadedImage));
-                            (rootView.findViewById(R.id.progress)).setVisibility(View.GONE);
-                        }
-
-                        @Override
-                        public void onLoadingCancelled(String imageUri, View view) {
-                            Log.v("Slide", "LOADING CANCELLED");
-
-                        }
-                    }, new ImageLoadingProgressListener() {
-                        @Override
-                        public void onProgressUpdate(String imageUri, View view, int current, int total) {
-                            ((ProgressBar) rootView.findViewById(R.id.progress)).setProgress(Math.round(100.0f * current / total));
-                        }
-                    });
-
-            {
-                if (user.getAsJsonObject().has("image")) {
-                    String title = "";
-                    String description = "";
-                    if (!user.getAsJsonObject().getAsJsonObject("image").get("title").isJsonNull()) {
-                        List<String> text = SubmissionParser.getBlocks(user.getAsJsonObject().getAsJsonObject("image").get("title").getAsString());
-                        title = text.get(0).trim();
-                    }
-
-                    if (!user.getAsJsonObject().getAsJsonObject("image").get("caption").isJsonNull()) {
-                        List<String> text = SubmissionParser.getBlocks(user.getAsJsonObject().getAsJsonObject("image").get("caption").getAsString());
-                        description = text.get(0).trim();
-                    }
-                    if (title.isEmpty() && description.isEmpty()) {
-                        rootView.findViewById(R.id.panel).setVisibility(View.GONE);
-                        SlidingUpPanelLayout.LayoutParams params = (SlidingUpPanelLayout.LayoutParams) (rootView.findViewById(R.id.margin)).getLayoutParams();
-                        params.setMargins(0,0,0,0);
-                        rootView.findViewById(R.id.margin).setLayoutParams(params);
-                    } else if (title.isEmpty()) {
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(description);
-                    } else {
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(title);
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.body)).setTextHtml(description);
-                    }
-
+                if (!imageJson.getAsJsonObject("image").get("caption").isJsonNull()) {
+                    List<String> text = SubmissionParser.getBlocks(imageJson.getAsJsonObject("image").get("caption").getAsString());
+                    description = text.get(0).trim();
+                }
+                if (title.isEmpty() && description.isEmpty()) {
+                    rootView.findViewById(R.id.panel).setVisibility(View.GONE);
+                    SlidingUpPanelLayout.LayoutParams params = (SlidingUpPanelLayout.LayoutParams) (rootView.findViewById(R.id.margin)).getLayoutParams();
+                    params.setMargins(0, 0, 0, 0);
+                    rootView.findViewById(R.id.margin).setLayoutParams(params);
+                } else if (title.isEmpty()) {
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(description);
                 } else {
-                    String title = "";
-                    String description = "";
-                    if (user.getAsJsonObject().has("title") && !user.getAsJsonObject().get("title").isJsonNull()) {
-                        List<String> text = SubmissionParser.getBlocks(user.getAsJsonObject().get("title").getAsString());
-                        title = text.get(0).trim();
-                    }
-
-                    if (user.getAsJsonObject().has("description") && !user.getAsJsonObject().get("description").isJsonNull()) {
-                        List<String> text = SubmissionParser.getBlocks(user.getAsJsonObject().get("description").getAsString());
-                        description = text.get(0).trim();
-
-                    }
-                    if (title.isEmpty() && description.isEmpty()) {
-                        rootView.findViewById(R.id.panel).setVisibility(View.GONE);
-                        rootView.findViewById(R.id.margin).setPadding(0,0,0,0);
-                    } else if (title.isEmpty()) {
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(description);
-                    } else {
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(title);
-                        ((SpoilerRobotoTextView) rootView.findViewById(R.id.body)).setTextHtml(description);
-                    }
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(title);
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.body)).setTextHtml(description);
+                }
+            } else {
+                String title = "";
+                String description = "";
+                if (imageJson.has("title") && !imageJson.get("title").isJsonNull()) {
+                    List<String> text = SubmissionParser.getBlocks(imageJson.get("title").getAsString());
+                    title = text.get(0).trim();
                 }
 
+                if (imageJson.has("description") && !imageJson.get("description").isJsonNull()) {
+                    List<String> text = SubmissionParser.getBlocks(imageJson.get("description").getAsString());
+                    description = text.get(0).trim();
+
+                }
+                if (title.isEmpty() && description.isEmpty()) {
+                    rootView.findViewById(R.id.panel).setVisibility(View.GONE);
+                    rootView.findViewById(R.id.margin).setPadding(0, 0, 0, 0);
+                } else if (title.isEmpty()) {
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(description);
+                } else {
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.title)).setTextHtml(title);
+                    ((SpoilerRobotoTextView) rootView.findViewById(R.id.body)).setTextHtml(description);
+                }
             }
+
+            // Finally, load the image into the View
+            loadImage(finalUrl, rootView, hqView, imageJson);
 
             return rootView;
         }
@@ -635,8 +610,73 @@ public class AlbumPager extends FullScreenActivity implements FolderChooserDialo
         public void onCreate(Bundle savedInstanceState) {
             super.onCreate(savedInstanceState);
             Bundle bundle = this.getArguments();
-            i = bundle.getInt("page", 0);
-            user = ((AlbumPager)getActivity()).images.get(i);
+            i = bundle.getInt(EXTRA_PAGE, 0);
+            imageJsonElement = ((AlbumPager)getActivity()).images.get(i);
+        }
+
+        private void loadImage(final String url, final ViewGroup rootView, final View hqView, final JsonObject imageJson) {
+            final ProgressBar progressBar = (ProgressBar) rootView.findViewById(R.id.progress);
+            final SubsamplingScaleImageView image = (SubsamplingScaleImageView) rootView.findViewById(R.id.image);
+            ImageView fakeImage = new ImageView(getActivity());
+
+            fakeImage.setLayoutParams(new LinearLayout.LayoutParams(image.getWidth(), image.getHeight()));
+            fakeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            // Set up a 1x1 px Bitmap to prevent universalimageloader from thinking the View was
+            // updated before the download is complete
+            fakeImage.setImageBitmap(Bitmap.createBitmap(1, 1, Bitmap.Config.RGB_565));
+
+            ((Reddit) getActivity().getApplication()).getImageLoader().displayImage(url, new ImageViewAware(fakeImage), ImageLoaderUtils.options, new ImageLoadingListener() {
+                @Override
+                public void onLoadingStarted(String imageUri, View view) {
+                    // Reset the current progress in case this is a LQ -> HQ image request
+                    updateProgressBar(progressBar, 0);
+                    showProgressBar(progressBar);
+                }
+
+                @Override
+                public void onLoadingFailed(String imageUri, View view, FailReason failReason) {
+                    LogUtil.e("Loading image failed: " + imageUri);
+                    hideProgressBar(progressBar);
+                    hqView.setVisibility(View.VISIBLE);
+
+                    // TODO: Show an error in the UI
+                }
+
+                @Override
+                public void onLoadingComplete(String imageUri, View view, Bitmap loadedImage) {
+                    image.recycle(); // In case this is a low quality to high quality request
+                    image.setImage(ImageSource.bitmap(loadedImage));
+                    hideProgressBar(progressBar);
+                }
+
+                @Override
+                public void onLoadingCancelled(String imageUri, View view) {
+                    LogUtil.w("Loading cancelled: " + imageUri);
+                    hideProgressBar(progressBar);
+                    hqView.setVisibility(View.VISIBLE);
+                    // TODO: Retry the download, or have a UI retry button
+                    // TODO: Show an error in the UI
+                }
+            }, new ImageLoadingProgressListener() {
+                @Override
+                public void onProgressUpdate(String imageUri, View view, int current, int total) {
+                    updateProgressBar(progressBar, Math.round(100.0f * current / total));
+                }
+            });
+        }
+
+        private void hideProgressBar(final ProgressBar progressBar) {
+            if(progressBar == null) return;
+            progressBar.setVisibility(View.GONE);
+        }
+
+        private void showProgressBar(final ProgressBar progressBar) {
+            if(progressBar == null) return;
+            progressBar.setVisibility(View.VISIBLE);
+        }
+
+        private void updateProgressBar(final ProgressBar progressBar, int progress) {
+            progressBar.setProgress(progress);
         }
     }
 
