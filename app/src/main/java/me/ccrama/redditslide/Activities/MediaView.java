@@ -1,5 +1,15 @@
 package me.ccrama.redditslide.Activities;
 
+import com.afollestad.materialdialogs.AlertDialogWrapper;
+import com.cocosw.bottomsheet.BottomSheet;
+import com.nostra13.universalimageloader.core.DisplayImageOptions;
+import com.nostra13.universalimageloader.core.assist.FailReason;
+import com.nostra13.universalimageloader.core.assist.ImageScaleType;
+import com.nostra13.universalimageloader.core.imageaware.ImageViewAware;
+import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
+import com.nostra13.universalimageloader.core.listener.ImageLoadingProgressListener;
+import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
+
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.Notification;
@@ -27,19 +37,6 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import com.afollestad.materialdialogs.AlertDialogWrapper;
-import com.cocosw.bottomsheet.BottomSheet;
-import com.google.gson.JsonObject;
-import com.koushikdutta.async.future.FutureCallback;
-import com.koushikdutta.ion.Ion;
-import com.nostra13.universalimageloader.core.DisplayImageOptions;
-import com.nostra13.universalimageloader.core.assist.FailReason;
-import com.nostra13.universalimageloader.core.assist.ImageScaleType;
-import com.nostra13.universalimageloader.core.imageaware.ImageViewAware;
-import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
-import com.nostra13.universalimageloader.core.listener.ImageLoadingProgressListener;
-import com.nostra13.universalimageloader.core.listener.SimpleImageLoadingListener;
-
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -58,7 +55,6 @@ import me.ccrama.redditslide.ContentType;
 import me.ccrama.redditslide.Fragments.FolderChooserDialogCreate;
 import me.ccrama.redditslide.R;
 import me.ccrama.redditslide.Reddit;
-import me.ccrama.redditslide.SecretConstants;
 import me.ccrama.redditslide.Views.ImageSource;
 import me.ccrama.redditslide.Views.MediaVideoView;
 import me.ccrama.redditslide.Views.SubsamplingScaleImageView;
@@ -404,25 +400,25 @@ public class MediaView extends FullScreenActivity implements FolderChooserDialog
         switch (ContentType.getContentType(contentUrl)) {
             case DEVIANTART:
                 if (!imageShown) {
-                    Ion.with(this).load("http://backend.deviantart.com/oembed?url=" + contentUrl).asJsonObject().setCallback(new FutureCallback<JsonObject>() {
-                        @Override
-                        public void onCompleted(Exception e, JsonObject result) {
-                            if (result != null && !result.isJsonNull() && (result.has("fullsize_url") || result.has("url"))) {
-
-                                String url;
-                                if (result.has("fullsize_url")) {
-                                    url = result.get("fullsize_url").getAsString();
-                                } else {
-                                    url = result.get("url").getAsString();
-                                }
-                                doLoadImage(url);
-                            } else {
-                                Intent i = new Intent(MediaView.this, Website.class);
-                                i.putExtra(Website.EXTRA_URL, contentUrl);
-                                MediaView.this.startActivity(i);
-                            }
-                        }
-                    });
+//                    Ion.with(this).load("http://backend.deviantart.com/oembed?url=" + contentUrl).asJsonObject().setCallback(new FutureCallback<JsonObject>() {
+//                        @Override
+//                        public void onCompleted(Exception e, JsonObject result) {
+//                            if (result != null && !result.isJsonNull() && (result.has("fullsize_url") || result.has("url"))) {
+//
+//                                String url;
+//                                if (result.has("fullsize_url")) {
+//                                    url = result.get("fullsize_url").getAsString();
+//                                } else {
+//                                    url = result.get("url").getAsString();
+//                                }
+//                                doLoadImage(url);
+//                            } else {
+//                                Intent i = new Intent(MediaView.this, Website.class);
+//                                i.putExtra(Website.EXTRA_URL, contentUrl);
+//                                MediaView.this.startActivity(i);
+//                            }
+//                        }
+//                    });
                 }
                 break;
             case IMAGE:
@@ -475,53 +471,53 @@ public class MediaView extends FullScreenActivity implements FolderChooserDialog
             if (hash.startsWith("/"))
                 hash = hash.substring(1, hash.length());
             LogUtil.v("Loading" + "https://imgur-apiv3.p.mashape.com/3/image/" + hash + ".json");
-            Ion.with(this).load("https://imgur-apiv3.p.mashape.com/3/image/" + hash + ".json")
-                    .addHeader("X-Mashape-Key", SecretConstants.getImgurApiKey(MediaView.this)).addHeader("Authorization", "Client-ID " + "bef87913eb202e9")
-                    .asJsonObject().setCallback(new FutureCallback<JsonObject>() {
-                                                    @Override
-                                                    public void onCompleted(Exception e, JsonObject obj) {
-
-                                                        if (obj != null && !obj.isJsonNull() && obj.has("error")) {
-                                                            LogUtil.v("Error loading content");
-                                                            (MediaView.this).finish();
-                                                        } else {
-                                                            try {
-                                                                if (!obj.isJsonNull() && obj.has("image")) {
-                                                                    String type = obj.get("image").getAsJsonObject().get("image").getAsJsonObject().get("type").getAsString();
-                                                                    String urls = obj.get("image").getAsJsonObject().get("links").getAsJsonObject().get("original").getAsString();
-
-                                                                    if (type.contains("gif")) {
-                                                                        doLoadGif(urls);
-                                                                    } else if (!imageShown) { //only load if there is no image
-                                                                        doLoadImage(urls);
-                                                                    }
-                                                                } else if (obj.has("data")) {
-                                                                    String type = obj.get("data").getAsJsonObject().get("type").getAsString();
-                                                                    String urls = obj.get("data").getAsJsonObject().get("link").getAsString();
-                                                                    String mp4 = "";
-                                                                    if (obj.get("data").getAsJsonObject().has("mp4")) {
-                                                                        mp4 = obj.get("data").getAsJsonObject().get("mp4").getAsString();
-                                                                    }
-
-                                                                    if (type.contains("gif")) {
-                                                                        doLoadGif(((mp4 == null || mp4.isEmpty()) ? urls : mp4));
-                                                                    } else if (!imageShown) { //only load if there is no image
-                                                                        doLoadImage(urls);
-                                                                    }
-                                                                } else {
-                                                                    if (!imageShown)
-                                                                        doLoadImage(finalUrl1);
-                                                                }
-                                                            } catch (Exception e2) {
-                                                                e2.printStackTrace();
-                                                                Intent i = new Intent(MediaView.this, Website.class);
-                                                                i.putExtra(Website.EXTRA_URL, finalUrl);
-                                                                MediaView.this.startActivity(i);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-            );
+//            Ion.with(this).load("https://imgur-apiv3.p.mashape.com/3/image/" + hash + ".json")
+//                    .addHeader("X-Mashape-Key", SecretConstants.getImgurApiKey(MediaView.this)).addHeader("Authorization", "Client-ID " + "bef87913eb202e9")
+//                    .asJsonObject().setCallback(new FutureCallback<JsonObject>() {
+//                                                    @Override
+//                                                    public void onCompleted(Exception e, JsonObject obj) {
+//
+//                                                        if (obj != null && !obj.isJsonNull() && obj.has("error")) {
+//                                                            LogUtil.v("Error loading content");
+//                                                            (MediaView.this).finish();
+//                                                        } else {
+//                                                            try {
+//                                                                if (!obj.isJsonNull() && obj.has("image")) {
+//                                                                    String type = obj.get("image").getAsJsonObject().get("image").getAsJsonObject().get("type").getAsString();
+//                                                                    String urls = obj.get("image").getAsJsonObject().get("links").getAsJsonObject().get("original").getAsString();
+//
+//                                                                    if (type.contains("gif")) {
+//                                                                        doLoadGif(urls);
+//                                                                    } else if (!imageShown) { //only load if there is no image
+//                                                                        doLoadImage(urls);
+//                                                                    }
+//                                                                } else if (obj.has("data")) {
+//                                                                    String type = obj.get("data").getAsJsonObject().get("type").getAsString();
+//                                                                    String urls = obj.get("data").getAsJsonObject().get("link").getAsString();
+//                                                                    String mp4 = "";
+//                                                                    if (obj.get("data").getAsJsonObject().has("mp4")) {
+//                                                                        mp4 = obj.get("data").getAsJsonObject().get("mp4").getAsString();
+//                                                                    }
+//
+//                                                                    if (type.contains("gif")) {
+//                                                                        doLoadGif(((mp4 == null || mp4.isEmpty()) ? urls : mp4));
+//                                                                    } else if (!imageShown) { //only load if there is no image
+//                                                                        doLoadImage(urls);
+//                                                                    }
+//                                                                } else {
+//                                                                    if (!imageShown)
+//                                                                        doLoadImage(finalUrl1);
+//                                                                }
+//                                                            } catch (Exception e2) {
+//                                                                e2.printStackTrace();
+//                                                                Intent i = new Intent(MediaView.this, Website.class);
+//                                                                i.putExtra(Website.EXTRA_URL, finalUrl);
+//                                                                MediaView.this.startActivity(i);
+//                                                            }
+//                                                        }
+//                                                    }
+//                                                }
+//            );
         }
     }
 
