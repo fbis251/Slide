@@ -126,7 +126,6 @@ import me.ccrama.redditslide.Constants;
 import me.ccrama.redditslide.Fragments.CommentPage;
 import me.ccrama.redditslide.Fragments.SubmissionsView;
 import me.ccrama.redditslide.Notifications.NotificationJobScheduler;
-import me.ccrama.redditslide.OfflineSubreddit;
 import me.ccrama.redditslide.PostMatch;
 import me.ccrama.redditslide.R;
 import me.ccrama.redditslide.Reddit;
@@ -1781,6 +1780,8 @@ public class MainActivity extends BaseActivity {
             findViewById(R.id.back).setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
+                    getWindow().getDecorView().clearFocus();
+                    profStuff.requestFocus();
                     if (profStuff.getVisibility() == View.GONE) {
                         expand(profStuff);
                         flipAnimator(false, header.findViewById(R.id.headerflip)).start();
@@ -2311,7 +2312,9 @@ public class MainActivity extends BaseActivity {
             drawerSearch.setOnFocusChangeListener(new View.OnFocusChangeListener() {
                 @Override
                 public void onFocusChange(View v, boolean hasFocus) {
-                    drawerSubList.smoothScrollToPositionFromTop(1, drawerSearch.getHeight(), 100);
+                    if(hasFocus) {
+                        drawerSubList.smoothScrollToPositionFromTop(1, drawerSearch.getHeight(), 100);
+                    }
                 }
             });
             drawerSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
